@@ -32,7 +32,15 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
 
     private val _activeFiltersDescription: MutableLiveData<String?> = MutableLiveData()
     val activeFiltersDescription: LiveData<String?> = _activeFiltersDescription
-    private val _activeFilters: MutableLiveData<FilterDeviceParams?> = MutableLiveData()
+    private val _activeFilters: MutableLiveData<FilterDeviceParams?> = MutableLiveData(FilterDeviceParams(
+        name = "D_0922_2",
+        rssiValue = -130,
+        isRssiFlag = false,
+        bleFormats = listOf(),
+        isOnlyFavourite = false,
+        isOnlyConnectable = true,
+        isOnlyBonded = false,
+    ))
     val activeFilters: LiveData<FilterDeviceParams?> = _activeFilters
 
     private val scannedDevices: MutableMap<String, ScannedDeviceInfo> = mutableMapOf()
