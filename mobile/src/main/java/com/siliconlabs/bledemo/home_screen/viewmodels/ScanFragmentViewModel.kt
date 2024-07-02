@@ -33,12 +33,12 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
     private val _activeFiltersDescription: MutableLiveData<String?> = MutableLiveData()
     val activeFiltersDescription: LiveData<String?> = _activeFiltersDescription
     private val _activeFilters: MutableLiveData<FilterDeviceParams?> = MutableLiveData(FilterDeviceParams(
-        name = "D_0922_2",
+        name = "D_0922",
         rssiValue = -130,
         isRssiFlag = false,
         bleFormats = listOf(),
         isOnlyFavourite = false,
-        isOnlyConnectable = true,
+        isOnlyConnectable = false,
         isOnlyBonded = false,
     ))
     val activeFilters: LiveData<FilterDeviceParams?> = _activeFilters
@@ -296,7 +296,8 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
     }
 
     private fun doesNameMatch(filterName: String, deviceName: String) : Boolean {
-        return getLowerCase(deviceName).contains(getLowerCase(filterName))
+        return ( getLowerCase(deviceName).contains(getLowerCase(filterName)) || 
+                getLowerCase(deviceName).contains(getLowerCase("le")) )
     }
 
     private fun doesAddressMatch(filterName: String, deviceAddress: String) : Boolean {
