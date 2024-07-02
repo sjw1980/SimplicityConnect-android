@@ -168,7 +168,7 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
                                     dataColor)
                         ).apply {
                             bluetoothInfo = updateScanInfo(bluetoothInfo, result)
-                            addNewGraphData(graphInfo.data, result)
+                            addNewGraphData(graphInfo.data, result) 
                         }.also {
                             if (index == -1) {
                                 _deviceToInsert.value = BluetoothInfoViewState(it)

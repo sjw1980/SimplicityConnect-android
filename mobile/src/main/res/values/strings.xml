@@ -809,6 +809,7 @@
     <string name="string_placeholder">%s</string>
     <string name="scanned_device_bonded">Bonded</string>
     <string name="scanned_device_not_bonded">Not bonded</string>
+    <string name="scanned_device_favorit">Favorit</string>
 
     <string name="scan_failed_error_code">Scan failed: error code = %d</string>
     <string name="scan_failed_application_registration_failed">Scan failed: app cannot be registered</string>

@@ -39,6 +39,13 @@ class DebugModeDeviceAdapter(
         val viewBinding = AdapterBrowserDeviceBinding.inflate(LayoutInflater.from(parent.context))
         return ViewHolder(parent.context, viewBinding).apply {
             setupUiListeners(this, viewBinding)
+            chosenDevices.forEachIndexed { index, deviceInfoWrapper ->
+                if (deviceInfoWrapper.deviceInfo.connectionState == BluetoothDeviceInfo.ConnectionState.DISCONNECTED) {
+                    if(deviceInfoWrapper.deviceInfo.isFavorite) {
+                        connectOrDisconnectDevice(this, index)
+                    }
+                }
+            }
         }
     }
 
@@ -57,19 +64,23 @@ class DebugModeDeviceAdapter(
     override fun getItemCount() = chosenDevices.size
 
 
+    private fun connectOrDisconnectDevice(holder: ViewHolder, position: Int) {
+        with(chosenDevices[position].deviceInfo) {
+            when (connectionState) {
+                BluetoothDeviceInfo.ConnectionState.CONNECTED -> debugModeCallback.disconnectDevice(position, this.device)
+                BluetoothDeviceInfo.ConnectionState.DISCONNECTED -> debugModeCallback.connectToDevice(position, this)
+                else -> { }
+            }
+        }
+    }
+
     private fun setupUiListeners(holder: ViewHolder, viewBinding: AdapterBrowserDeviceBinding) {
         viewBinding.apply {
             expandArrow.setOnClickListener { RecyclerViewUtils.withProperAdapterPosition(holder) { pos ->
                 debugModeCallback.toggleViewExpansion(pos)
             } }
             connectionBtn.setOnClickListener { RecyclerViewUtils.withProperAdapterPosition(holder) { pos ->
-                with(chosenDevices[pos].deviceInfo) {
-                    when (connectionState) {
-                        BluetoothDeviceInfo.ConnectionState.CONNECTED -> debugModeCallback.disconnectDevice(pos, this.device)
-                        BluetoothDeviceInfo.ConnectionState.DISCONNECTED -> debugModeCallback.connectToDevice(pos, this)
-                        else -> { }
-                    }
-                }
+                connectOrDisconnectDevice(holder, pos)
             } }
             favoriteBtn.setOnClickListener { RecyclerViewUtils.withProperAdapterPosition(holder) { pos ->
                 val clickedDevice = chosenDevices[pos].deviceInfo
