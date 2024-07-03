@@ -39,13 +39,6 @@ class DebugModeDeviceAdapter(
         val viewBinding = AdapterBrowserDeviceBinding.inflate(LayoutInflater.from(parent.context))
         return ViewHolder(parent.context, viewBinding).apply {
             setupUiListeners(this, viewBinding)
-            chosenDevices.forEachIndexed { index, deviceInfoWrapper ->
-                if (deviceInfoWrapper.deviceInfo.connectionState == BluetoothDeviceInfo.ConnectionState.DISCONNECTED) {
-                    if(deviceInfoWrapper.deviceInfo.isFavorite) {
-                        connectOrDisconnectDevice(this, index)
-                    }
-                }
-            }
         }
     }
 
@@ -59,6 +52,12 @@ class DebugModeDeviceAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(chosenDevices[position])
+
+        if (chosenDevices[position].deviceInfo.connectionState == BluetoothDeviceInfo.ConnectionState.DISCONNECTED) {
+            if(chosenDevices[position].deviceInfo.isFavorite) {
+                connectOrDisconnectDevice(holder, position)
+            }
+        }
     }
 
     override fun getItemCount() = chosenDevices.size
