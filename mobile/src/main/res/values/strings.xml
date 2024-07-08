@@ -1,7 +1,7 @@
 <resources>
 
     <!-- Application -->
-    <string name="app_name_simplicity_Connect">Si Connect</string>
+    <string name="app_name_simplicity_Connect">HillsEco</string>
 
     <!-- Bluetooth bar -->
     <string name="bluetooth_adapter_bar_disabled">Bluetooth adapter disabled</string>

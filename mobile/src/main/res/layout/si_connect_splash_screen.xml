@@ -15,24 +15,24 @@
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageView
-            android:background="@drawable/wi_fi_symbol"
+            android:background="@drawable/icon_bluetooth"
             android:layout_width="@dimen/splash_screen_dim"
             android:layout_height="@dimen/splash_screen_dim"/>
 
-        <ImageView
+        <!-- <ImageView
             android:layout_marginTop="@dimen/splash_si_connect_logo"
             android:background="@drawable/si_connect"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content"/> -->
     </LinearLayout>
 
-    <ImageView
+    <!-- <ImageView
         android:layout_marginBottom="@dimen/splash_si_labs_logo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:background="@drawable/silabs_logo"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent" /> -->
 
 </androidx.constraintlayout.widget.ConstraintLayout>

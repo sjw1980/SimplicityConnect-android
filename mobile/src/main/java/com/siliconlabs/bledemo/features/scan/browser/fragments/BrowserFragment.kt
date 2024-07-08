@@ -333,10 +333,6 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
                 }
                 true
             }
-            R.id.menu_uuid_dictionary -> {
-                startActivity(Intent(requireContext(), UuidDictionaryActivity::class.java))
-                true
-            }
             else -> return super.onOptionsItemSelected(item)
         }
     }

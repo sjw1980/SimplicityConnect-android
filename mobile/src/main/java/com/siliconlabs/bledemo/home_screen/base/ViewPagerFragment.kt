@@ -35,8 +35,6 @@ class ViewPagerFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         initScanPager()
-        setupDataObservers()
-        viewModel.updateActiveConnections(bluetoothService?.getActiveConnections())
     }
 
     fun getScanFragment() = parentFragment as ScanFragment
@@ -53,8 +51,6 @@ class ViewPagerFragment : Fragment() {
         TabLayoutMediator(scan_tab_layout, scan_view_pager2) { tab, position ->
             tab.text = when (position) {
                 0 -> getString(R.string.tab_scanner_label)
-                1 -> getString(R.string.tab_rssi_graph_label)
-                2 -> getString(R.string.tab_connections_label)
                 else -> null
             }
         }.attach()
@@ -67,13 +63,11 @@ class ViewPagerFragment : Fragment() {
     }
 
     private inner class ScanPagerAdapter : FragmentStateAdapter(this) {
-        override fun getItemCount() = 3
+        override fun getItemCount() = 1
 
         override fun createFragment(position: Int): Fragment {
             return when (position) {
                 0 -> BrowserFragment()
-                1 -> RssiGraphFragment()
-                2 -> ConnectionsFragment()
                 else -> BrowserFragment()
             }
         }
