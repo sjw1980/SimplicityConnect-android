@@ -21,7 +21,7 @@ import android.content.Context
 import com.siliconlabs.bledemo.bluetooth.ble.GattCharacteristic
 import com.siliconlabs.bledemo.bluetooth.ble.GattService
 import com.siliconlabs.bledemo.R
-import com.siliconlabs.bledemo.features.configure.gatt_configurator.models.Property
+import com.siliconlabs.bledemo.bluetooth.ble.Property
 import com.siliconlabs.bledemo.utils.Converters.calculateDecimalValue
 import com.siliconlabs.bledemo.utils.Converters.getDecimalValue
 import com.siliconlabs.bledemo.utils.Converters.getTwosComplementFromUnsignedInt

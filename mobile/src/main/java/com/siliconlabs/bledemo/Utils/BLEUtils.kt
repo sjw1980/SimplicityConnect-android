@@ -6,11 +6,21 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattService
 import com.siliconlabs.bledemo.bluetooth.ble.GattCharacteristic
 import com.siliconlabs.bledemo.bluetooth.ble.GattService
+import com.siliconlabs.bledemo.bluetooth.services.BluetoothService
 import java.util.*
 
 @SuppressLint("MissingPermission")
 object BLEUtils {
 
+    var IS_FIRMWARE_REBOOTED:Boolean? = false
+
+    var GATT_DEVICE_SELECTED = BluetoothService.GattConnectType.NOTHING
+
+    var MATTER_DEVICE_NAME  = ""
+    var MATTER_DEVICE_ID = ""
+    var MATTER_DEVICE_TYPE:Int? = -1
+    var MATTER_IS_LIGHT_SWITCH_BIND_SUCCESSFUL:Boolean = false
+    var REBOOTED_FIRMWARE_GATT_ADDRESS = ""
 
     fun setNotificationForCharacteristic(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic?, gattDescriptor: UUID?, value: Notifications): Boolean {
         var written = false

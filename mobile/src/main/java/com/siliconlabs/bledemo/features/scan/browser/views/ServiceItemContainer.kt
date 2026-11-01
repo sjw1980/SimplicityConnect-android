@@ -11,7 +11,6 @@ import android.view.animation.Transformation
 import android.widget.LinearLayout
 import com.siliconlabs.bledemo.bluetooth.parsing.Common
 import com.siliconlabs.bledemo.bluetooth.parsing.Engine
-import com.siliconlabs.bledemo.features.scan.browser.models.Mapping
 import com.siliconlabs.bledemo.R
 import com.siliconlabs.bledemo.databinding.ServiceContainerBinding
 import com.siliconlabs.bledemo.utils.UuidUtils
@@ -19,10 +18,8 @@ import java.util.*
 
 class ServiceItemContainer(
         context: Context,
-        private val callback: Callback,
         val service: BluetoothGattService,
-        private val isMandatorySystemService: Boolean,
-        private val serviceDictionaryUuids: Map<String, Mapping>
+        private val isMandatorySystemService: Boolean
 ) : LinearLayout(context) {
 
     private var nameType = NameType.UNKNOWN
@@ -44,10 +41,6 @@ class ServiceItemContainer(
                 removeAllViews()
             }
             serviceTitle.text = getServiceName()
-            tvRenameService.visibility = when (nameType) {
-                NameType.ENGINE, NameType.CUSTOM -> View.GONE
-                NameType.USER, NameType.UNKNOWN -> View.VISIBLE
-            }
             serviceUuid.text = UuidUtils.getUuidText(service.uuid)
 
 
@@ -62,7 +55,17 @@ class ServiceItemContainer(
 
     private fun setupUiListeners() {
         _binding.apply {
-            tvRenameService.setOnClickListener { callback.onRenameClicked(this@ServiceItemContainer) }
+            containerMoreLessInfo.setOnClickListener {
+                if (serviceCharacteristicsContainer.visibility == View.VISIBLE) {
+                    tvMoreInfo.text = resources.getString(R.string.more_info)
+                    serviceCharacteristicsContainer.visibility = View.GONE
+                    expandArrow.setState(shouldShowDetails = false)
+                } else {
+                    tvMoreInfo.text = resources.getString(R.string.Less_Info)
+                    expandArrow.setState(shouldShowDetails = true)
+                    animateCharacteristicExpansion()
+                }
+            }
             expandArrow.setOnClickListener {
                 if (serviceCharacteristicsContainer.visibility == View.VISIBLE) {
                     tvMoreInfo.text = resources.getString(R.string.more_info)
@@ -89,19 +92,9 @@ class ServiceItemContainer(
                 name
             }
         } ?: run {
-            serviceDictionaryUuids[UuidUtils.getUuidText(service.uuid)]?.let { mapping ->
-                nameType = NameType.USER
-                mapping.name
-            }
-        } ?: run {
             nameType = NameType.UNKNOWN
             context.getString(R.string.unknown_service)
         }
-    }
-
-    fun setServiceName(newName: String) {
-        nameType = NameType.USER
-        _binding.serviceTitle.text = newName
     }
 
     private fun animateCharacteristicExpansion() {
@@ -156,10 +149,6 @@ class ServiceItemContainer(
                 else -> setMargins(horizontalMargin, 0, horizontalMargin, verticalSpacing)
             }
         }
-    }
-
-    interface Callback {
-        fun onRenameClicked(container: ServiceItemContainer)
     }
 
     enum class NameType {

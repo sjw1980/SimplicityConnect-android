@@ -22,6 +22,7 @@ import android.bluetooth.*
 import android.content.*
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -32,9 +33,11 @@ import android.util.Log
 import android.view.*
 import android.view.View.OnScrollChangeListener
 import android.widget.*
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat.startActivity
 import androidx.core.view.children
 import androidx.fragment.app.Fragment
+import by.kirich1409.viewbindingdelegate.viewBinding
 import com.siliconlabs.bledemo.base.activities.BaseActivity
 import com.siliconlabs.bledemo.bluetooth.ble.ErrorCodes
 import com.siliconlabs.bledemo.bluetooth.ble.TimeoutGattCallback
@@ -44,9 +47,13 @@ import com.siliconlabs.bledemo.features.scan.browser.dialogs.ErrorDialog.OtaErro
 import com.siliconlabs.bledemo.features.scan.browser.fragments.*
 import com.siliconlabs.bledemo.features.scan.browser.models.OtaFileType
 import com.siliconlabs.bledemo.R
+import com.siliconlabs.bledemo.bluetooth.ble.BluetoothDeviceInfo
 import com.siliconlabs.bledemo.common.views.FlyInBar
+import com.siliconlabs.bledemo.databinding.ActivityDeviceServicesBinding
+import com.siliconlabs.bledemo.features.scan.browser.fragments.BrowserFragment.Companion.ORIGIN
+import com.siliconlabs.bledemo.features.scan.browser.fragments.BrowserFragment.Companion.RECYCLERVIEW_POSITION
+import com.siliconlabs.bledemo.home_screen.viewmodels.ScanFragmentViewModel
 import com.siliconlabs.bledemo.utils.*
-import kotlinx.android.synthetic.main.activity_device_services.*
 import timber.log.Timber
 import java.io.*
 import java.util.*
@@ -61,7 +68,7 @@ class DeviceServicesActivity : BaseActivity() {
     private var mtuReadType = MtuReadType.VIEW_INITIALIZATION
     private var isLogFragmentOn = false
 
-    private lateinit var menu: Menu
+    private var menu: Menu? = null
 
     private var reliable = true
     private var doubleStepUpload = false
@@ -96,17 +103,23 @@ class DeviceServicesActivity : BaseActivity() {
         private set
 
     private var bluetoothDevice: BluetoothDevice? = null
+    private var devicesAdapterRecyclerViewItemPos :Int = -1
     var bluetoothGatt: BluetoothGatt? = null
 
     private var retryAttempts = 0
 
-    private val hideFabOnScrollChangeListener = OnScrollChangeListener { v, scrollX, scrollY, oldScrollX, oldScrollY ->
-        if (scrollY > oldScrollY) {
-            btn_bond_action.hide()
-        } else {
-            btn_bond_action.show()
+    private lateinit var binding:ActivityDeviceServicesBinding
+
+    lateinit var scanFragmentViewModel: ScanFragmentViewModel
+
+    private val hideFabOnScrollChangeListener =
+        OnScrollChangeListener { v, scrollX, scrollY, oldScrollX, oldScrollY ->
+            if (scrollY > oldScrollY) {
+                binding.btnDisconnect.hide()
+            } else {
+                binding.btnDisconnect.show()
+            }
         }
-    }
 
     private val remoteServicesFragment = RemoteServicesFragment(hideFabOnScrollChangeListener)
     private val localServicesFragment = LocalServicesFragment()
@@ -115,7 +128,8 @@ class DeviceServicesActivity : BaseActivity() {
     private val bondStateChangeListener = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
-                val newState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+                val newState =
+                    intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
                 displayBondState(newState)
                 if (newState == BluetoothDevice.BOND_BONDED) {
                     showMessage(getString(R.string.device_bonded_successfully))
@@ -140,7 +154,7 @@ class DeviceServicesActivity : BaseActivity() {
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
             if (viewState == ViewState.IDLE) {
                 super.onReadRemoteRssi(gatt, rssi, status)
-                runOnUiThread { tv_rssi.text = resources.getString(R.string.n_dBm, rssi) }
+                runOnUiThread { binding.tvRssi.text = resources.getString(R.string.n_dBm, rssi) }
             }
         }
 
@@ -150,15 +164,17 @@ class DeviceServicesActivity : BaseActivity() {
             when (mtuReadType) {
                 MtuReadType.VIEW_INITIALIZATION -> {
                     MTU = if (status == BluetoothGatt.GATT_SUCCESS) mtu
-                          else DEFAULT_MTU_VALUE
-                    gatt.requestConnectionPriority(connectionPriority)
+                    else DEFAULT_MTU_VALUE
+                    //gatt.requestConnectionPriority(connectionPriority)
                 }
+
                 MtuReadType.UPLOAD_INITIALIZATION -> {
                     MTU = if (status == BluetoothGatt.GATT_SUCCESS) mtu
-                          else DEFAULT_MTU_VALUE
+                    else DEFAULT_MTU_VALUE
                     gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH) // optimize upload speed
                     writeOtaControl(OTA_CONTROL_START_COMMAND)
                 }
+
                 MtuReadType.USER_REQUESTED -> {
                     if (status == BluetoothGatt.GATT_SUCCESS) {
                         MTU = mtu
@@ -183,33 +199,50 @@ class DeviceServicesActivity : BaseActivity() {
             when (newState) {
                 BluetoothGatt.STATE_CONNECTED -> {
                     if (viewState == ViewState.REBOOTING ||
-                        viewState == ViewState.REBOOTING_NEW_FIRMWARE) {
+                        viewState == ViewState.REBOOTING_NEW_FIRMWARE
+                    ) {
                         handler.postDelayed({
                             bluetoothGatt = null
                             gatt.discoverServices()
                         }, 250)
                     }
                 }
+
                 BluetoothGatt.STATE_DISCONNECTED -> {
                     when (viewState) {
                         ViewState.IDLE -> when (status) {
                             0 -> finish()
                             else -> {
-                                showLongMessage(ErrorCodes.getDeviceDisconnectedMessage(getDeviceName(), status))
+                                showLongMessage(
+                                    ErrorCodes.getDeviceDisconnectedMessage(
+                                        getDeviceName(),
+                                        status
+                                    )
+                                )
                                 finish()
                             }
                         }
+
                         ViewState.REBOOTING -> when (status) {
                             19 -> {
                                 /* Device is reconnecting into ota mode */
                                 showInitializationInfo()
                             }
+
                             0 -> {} /* Device reconnecting for another file upload, let it be */
                             else -> showErrorDialog(status)
                         }
+
                         ViewState.UPLOADING -> showErrorDialog(status)
-                        ViewState.REBOOTING_NEW_FIRMWARE -> { /* Do nothing */ }
-                        else -> { finish() }
+                        ViewState.REBOOTING_NEW_FIRMWARE -> { /* Do nothing */
+                            Log.d("BLE_DEBUG","reboot completed")
+                            BLEUtils.IS_FIRMWARE_REBOOTED = true
+                            BLEUtils.REBOOTED_FIRMWARE_GATT_ADDRESS = gatt.device.address
+                        }
+
+                        else -> {
+                            finish()
+                        }
                     }
                 }
             }
@@ -249,31 +282,34 @@ class DeviceServicesActivity : BaseActivity() {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 showErrorDialog(status)
                 if (viewState == ViewState.UPLOADING) viewState = ViewState.IDLE
-            }
-            else {
+            } else {
                 when (characteristic.uuid) {
-                    UuidConsts.OTA_CONTROL -> { when (characteristic.value[0]) {
-                        0x00.toByte() -> {
-                            if (viewState == ViewState.REBOOTING) {
-                                reloadDeviceIntoOtaMode()
-                            }
-                            else if (viewState == ViewState.INITIALIZING_UPLOAD) {
-                                viewState = ViewState.UPLOADING
-                                startOtaUpload()
-                            }
-                        }
-                        0x03.toByte() -> {
-                            if (viewState == ViewState.UPLOADING) {
-                                viewState = ViewState.IDLE
-                                if (boolFullOTA) {
-                                    prepareForNextUpload()
-                                } else {
-                                    runOnUiThread { otaProgressDialog?.toggleEndButton(isEnabled = true) }
+                    UuidConsts.OTA_CONTROL -> {
+                        when (characteristic.value[0]) {
+                            0x00.toByte() -> {
+                                if (viewState == ViewState.REBOOTING) {
+                                    reloadDeviceIntoOtaMode()
+                                } else if (viewState == ViewState.INITIALIZING_UPLOAD) {
+                                    viewState = ViewState.UPLOADING
+                                    startOtaUpload()
                                 }
                             }
+
+                            0x03.toByte() -> {
+                                if (viewState == ViewState.UPLOADING) {
+                                    viewState = ViewState.IDLE
+                                    if (boolFullOTA) {
+                                        prepareForNextUpload()
+                                    } else {
+                                        runOnUiThread { otaProgressDialog?.toggleEndButton(isEnabled = true) }
+                                    }
+                                }
+                            }
+
+                            else -> {}
                         }
-                        else -> { }
-                    } }
+                    }
+
                     UuidConsts.OTA_DATA -> handleReliableUploadResponse()
                 }
             }
@@ -281,19 +317,30 @@ class DeviceServicesActivity : BaseActivity() {
         }
 
         //CALLBACK ON DESCRIPTOR WRITE
-        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int
+        ) {
             super.onDescriptorWrite(gatt, descriptor, status)
             remoteServicesFragment.updateDescriptorView(descriptor)
         }
 
         //CALLBACK ON DESCRIPTOR READ
-        override fun onDescriptorRead(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+        override fun onDescriptorRead(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int
+        ) {
             super.onDescriptorRead(gatt, descriptor, status)
             remoteServicesFragment.updateDescriptorView(descriptor)
         }
 
         //CALLBACK ON CHARACTERISTIC CHANGED VALUE (READ - CHARACTERISTIC NOTIFICATION)
-        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic
+        ) {
             super.onCharacteristicChanged(gatt, characteristic)
             remoteServicesFragment.updateCharacteristicView(characteristic)
         }
@@ -306,7 +353,8 @@ class DeviceServicesActivity : BaseActivity() {
             if (status != BluetoothGatt.GATT_SUCCESS) showErrorDialog(status)
             else {
                 printServicesInfo(gatt)
-                otaDataCharPresent = (gatt.getService(UuidConsts.OTA_SERVICE)?.getCharacteristic(UuidConsts.OTA_DATA) != null)
+                otaDataCharPresent = (gatt.getService(UuidConsts.OTA_SERVICE)
+                    ?.getCharacteristic(UuidConsts.OTA_DATA) != null)
 
                 when (viewState) {
                     ViewState.REFRESHING_SERVICES -> {
@@ -315,6 +363,7 @@ class DeviceServicesActivity : BaseActivity() {
                         }, GATT_FETCH_ON_SERVICE_DISCOVERED_DELAY)
                         viewState = ViewState.IDLE
                     }
+
                     ViewState.IDLE -> {
                         handler.postDelayed({
                             initServicesFragments(bluetoothGatt?.services.orEmpty())
@@ -322,16 +371,18 @@ class DeviceServicesActivity : BaseActivity() {
                             gatt.requestMtu(INITIALIZATION_MTU_VALUE)
                         }, GATT_FETCH_ON_SERVICE_DISCOVERED_DELAY)
                     }
+
                     ViewState.REBOOTING -> {
                         viewState = ViewState.INITIALIZING_UPLOAD
                         mtuReadType = MtuReadType.UPLOAD_INITIALIZATION
                         bluetoothGatt?.requestMtu(INITIALIZATION_MTU_VALUE)
                     }
+
                     ViewState.REBOOTING_NEW_FIRMWARE -> {
                         bluetoothGatt?.readCharacteristic(getDeviceNameCharacteristic())
                     }
 
-                    else -> { }
+                    else -> {}
                 }
             }
         }
@@ -348,16 +399,20 @@ class DeviceServicesActivity : BaseActivity() {
         hideOtaLoadingDialog()
         otafile = readChosenFile()
         pack = 0
-        if (reliable) { setupMtuDivisible() }
+        if (reliable) {
+            setupMtuDivisible()
+        }
 
         hideOtaProgressDialog()
-        showOtaProgressDialog(OtaProgressDialog.OtaInfo(
+        showOtaProgressDialog(
+            OtaProgressDialog.OtaInfo(
                 prepareFilename(),
                 otafile?.size,
                 if (reliable) mtuDivisible else MTU,
                 doubleStepUpload,
                 if (doubleStepUpload) stackPath != "" else true
-        ))
+            )
+        )
 
         Thread {
             Thread.sleep(DIALOG_DELAY)
@@ -423,10 +478,11 @@ class DeviceServicesActivity : BaseActivity() {
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_device_services)
+        binding = ActivityDeviceServicesBinding.inflate(LayoutInflater.from(this))
+        setContentView(binding.root)
 
         bluetoothDevice = intent.getParcelableExtra(CONNECTED_DEVICE)
-
+        devicesAdapterRecyclerViewItemPos = intent.getIntExtra(RECYCLERVIEW_POSITION,-1)
         setupBottomNavigation()
         setupActionBar()
         setupUiListeners()
@@ -435,6 +491,7 @@ class DeviceServicesActivity : BaseActivity() {
 
         showCharacteristicLoadingAnimation(getString(R.string.debug_mode_device_loading_gatt_info))
         bindBluetoothService()
+        scanFragmentViewModel = ScanFragmentViewModel(this@DeviceServicesActivity)
     }
 
     private fun setupBottomNavigation() {
@@ -444,18 +501,21 @@ class DeviceServicesActivity : BaseActivity() {
             add(R.id.services_fragment_container, remoteServicesFragment)
         }.commit()
 
-        services_bottom_nav.setOnNavigationItemSelectedListener { item ->
+
+        binding.servicesBottomNav.setOnNavigationItemSelectedListener { item ->
             (when (item.itemId) {
                 R.id.services_nav_remote -> {
                     toggleRemoteActions(isRemoteFragmentOn = true)
                     supportActionBar?.title = getDeviceName()
                     remoteServicesFragment
                 }
+
                 R.id.services_nav_local -> {
                     toggleRemoteActions(isRemoteFragmentOn = false)
                     supportActionBar?.title = bluetoothService?.bluetoothAdapter?.name
                     localServicesFragment
                 }
+
                 else -> null
             })?.let { newFragment ->
                 supportFragmentManager.beginTransaction().apply {
@@ -469,22 +529,26 @@ class DeviceServicesActivity : BaseActivity() {
     }
 
     private fun toggleRemoteActions(isRemoteFragmentOn: Boolean) {
-        btn_bond_action.visibility =
-                if (isRemoteFragmentOn) View.VISIBLE
-                else View.GONE
-        connection_info.visibility =
-                if (isRemoteFragmentOn) View.VISIBLE
-                else View.GONE
+        val createBondMenu = menu?.findItem(R.id.menu_create_bond)
+
+        createBondMenu?.isVisible = isRemoteFragmentOn
+
+        binding.connectionInfo.visibility =
+            if (isRemoteFragmentOn) View.VISIBLE
+            else View.GONE
         toggleMenuItemsVisibility(isRemoteFragmentOn)
     }
 
     private fun toggleMenuItemsVisibility(areVisible: Boolean) {
-        menu.children.forEach {
+        menu?.children?.forEach {
             it.isVisible = areVisible
         }
     }
 
     private fun setupActionBar() {
+        AppUtil.setEdgeToEdge(window, this)
+        setSupportActionBar(binding.toolbar)
+        binding.toolbar.popupTheme = androidx.appcompat.R.style.ThemeOverlay_AppCompat_Light
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
             setDisplayShowHomeEnabled(true)
@@ -493,74 +557,99 @@ class DeviceServicesActivity : BaseActivity() {
     }
 
     private fun setupUiListeners() {
-        tv_ota_firmware.setOnClickListener {
+        binding.tvOtaFirmware.setOnClickListener {
             if (isUiCreated) checkForOtaCharacteristic()
         }
-        btn_bond_action.setOnClickListener {
-            bluetoothGatt?.device?.let { when (it.bondState) {
-                BluetoothDevice.BOND_BONDED -> askUnbondDevice(it)
-                BluetoothDevice.BOND_NONE -> it.createBond()
-                else -> { }
-            } }
+        binding.btnDisconnect.setOnClickListener {
+
+            if(null != intent && intent.getStringExtra(ORIGIN).equals("BrowserFragment",true)){
+                if(devicesAdapterRecyclerViewItemPos >= 0){
+                    if(null != scanFragmentViewModel){
+                        scanFragmentViewModel.setDeviceConnectionState(devicesAdapterRecyclerViewItemPos, connectionState = BluetoothDeviceInfo.ConnectionState.DISCONNECTED)
+                    }
+                    if(null != bluetoothDevice){
+                        bluetoothService?.disconnectGatt(bluetoothDevice!!.address)
+                    }
+                }else{
+                    println("Error: Invalid devicesAdapterRecyclerViewItemPos in setupUiListeners")
+                    Log.e("Error: ", "Invalid devicesAdapterRecyclerViewItemPos in setupUiListeners")
+
+                }
+            }else{
+                bluetoothService?.disconnectGatt(bluetoothDevice!!.address)
+            }
+
         }
     }
 
     private fun checkForOtaCharacteristic() {
         if (getOtaControlCharacteristic() != null) showOtaConfigDialog()
-        else OtaCharacteristicMissingDialog().show(supportFragmentManager, "ota_characteristic_missing_dialog")
+        else OtaCharacteristicMissingDialog().show(
+            supportFragmentManager,
+            "ota_characteristic_missing_dialog"
+        )
     }
 
     private fun registerReceivers() {
+
         registerReceiver(bluetoothReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
-        registerReceiver(bondStateChangeListener, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+        registerReceiver(
+            bondStateChangeListener,
+            IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        )
+
     }
 
     private fun displayBondState(newState: Int? = null) {
-        val state = newState ?: bluetoothGatt?.device?.bondState ?: BluetoothDevice.BOND_NONE
 
+        val state = newState ?: bluetoothGatt?.device?.bondState ?: BluetoothDevice.BOND_NONE
+        val createBondMenu = menu?.findItem(R.id.menu_create_bond)
         when (state) {
             BluetoothDevice.BOND_BONDED -> {
-                tv_bond_state.text = getString(R.string.bonded)
-                btn_bond_action.apply {
-                    isEnabled = true
-                    text = getString(R.string.delete_bond)
-                    setIsActionOn(true)
-                }
-            }
-            BluetoothDevice.BOND_BONDING -> {
-                tv_bond_state.text = getString(R.string.bonding)
-                btn_bond_action.apply {
-                    isEnabled = false
-                    text = getString(R.string.bonding)
-                }
-            }
-            BluetoothDevice.BOND_NONE -> {
-                tv_bond_state.text = getString(R.string.not_bonded)
-                btn_bond_action.apply {
-                    isEnabled = true
-                    text = getString(R.string.create_bond)
-                    setIsActionOn(false)
-                }
+
+                binding.tvBondState.text = getString(R.string.bonded)
+
+                createBondMenu?.isEnabled = true
+                createBondMenu?.title = getString(R.string.delete_bond)
 
             }
-            else -> { }
+
+            BluetoothDevice.BOND_BONDING -> {
+                binding.tvBondState.text = getString(R.string.bonding)
+
+                createBondMenu?.isEnabled = false
+                createBondMenu?.title = getString(R.string.bonding)
+            }
+
+            BluetoothDevice.BOND_NONE -> {
+                binding.tvBondState.text = getString(R.string.not_bonded)
+
+                createBondMenu?.isEnabled = true
+                createBondMenu?.title = getString(R.string.create_bond)
+
+            }
+
+            else -> {}
         }
     }
 
-    private fun getOtaControlCharacteristic() : BluetoothGattCharacteristic? {
-        return bluetoothGatt?.getService(UuidConsts.OTA_SERVICE)?.getCharacteristic(UuidConsts.OTA_CONTROL)
+    private fun getOtaControlCharacteristic(): BluetoothGattCharacteristic? {
+        return bluetoothGatt?.getService(UuidConsts.OTA_SERVICE)
+            ?.getCharacteristic(UuidConsts.OTA_CONTROL)
     }
 
-    private fun getDeviceNameCharacteristic() : BluetoothGattCharacteristic? {
-        return bluetoothGatt?.getService(UuidConsts.GENERIC_ACCESS)?.getCharacteristic(UuidConsts.DEVICE_NAME)
+    private fun getDeviceNameCharacteristic(): BluetoothGattCharacteristic? {
+        return bluetoothGatt?.getService(UuidConsts.GENERIC_ACCESS)
+            ?.getCharacteristic(UuidConsts.DEVICE_NAME)
     }
 
     private fun setActivityResult() {
         setResult(REFRESH_INFO_RESULT_CODE, Intent().apply {
             putExtra(CONNECTED_DEVICE, bluetoothDevice)
-            putExtra(CONNECTION_STATE,
-                    if (bluetoothService?.isGattConnected(bluetoothDevice?.address) == true) BluetoothGatt.STATE_CONNECTED
-                    else BluetoothGatt.STATE_DISCONNECTED
+            putExtra(
+                CONNECTION_STATE,
+                if (bluetoothService?.isGattConnected(bluetoothDevice?.address) == true) BluetoothGatt.STATE_CONNECTED
+                else BluetoothGatt.STATE_DISCONNECTED
             )
         })
     }
@@ -583,16 +672,37 @@ class DeviceServicesActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            if (!isFinishing && !isDestroyed) {
+                runOnUiThread {
+                    if (mtuRequestDialog?.isVisible == true && mtuRequestDialog?.isShowing() == true) {
+                        mtuRequestDialog?.dismiss()
+                    }
+                    if(otaConfigDialog?.isVisible == true && otaConfigDialog?.isShowing() == true){
+                        otaConfigDialog?.dismiss()
+                    }
+                }
+                hideOtaProgressDialog()
+                hideOtaLoadingDialog()
+                runOnUiThread {
+                    if(errorDialog?.isVisible == true && errorDialog?.isShowing() == true){
+                        errorDialog?.dismiss()
+                    }
 
-        mtuRequestDialog?.dismiss()
-        otaConfigDialog?.dismiss()
-        hideOtaProgressDialog()
-        hideOtaLoadingDialog()
-        errorDialog?.dismiss()
+                }
+            }
+            unregisterReceivers()
+            bluetoothService?.isNotificationEnabled = true
+            bluetoothBinding?.unbind()
+        } catch (e: Exception) {
+            if(e is IllegalStateException){
+                Log.e("Devices Services Activity","Illegal State Exception")
+            }else{
+                Log.e("Devices Services Activity","Exception"+e.message)
+            }
+        }
 
-        unregisterReceivers()
-        bluetoothService?.isNotificationEnabled = true
-        bluetoothBinding?.unbind()
+
     }
 
     override fun finish() {
@@ -608,9 +718,15 @@ class DeviceServicesActivity : BaseActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        this.menu = menu
         menuInflater.inflate(R.menu.menu_device_services, menu)
+        this.menu = menu
         return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
+        // Now it's safe to call displayBondState because the menu is ready
+        displayBondState()
+        return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -618,18 +734,31 @@ class DeviceServicesActivity : BaseActivity() {
             R.id.show_logs -> showLogFragment()
             R.id.request_priority -> {
                 ConnectionRequestDialog(connectionPriority, connectionRequestCallback)
-                        .show(supportFragmentManager, CONNECTION_REQUEST_DIALOG_FRAGMENT)
+                    .show(supportFragmentManager, CONNECTION_REQUEST_DIALOG_FRAGMENT)
             }
+
             R.id.request_mtu -> {
                 mtuRequestDialog = MtuRequestDialog(MTU, mtuRequestCallback).also {
                     it.show(supportFragmentManager, MTU_REQUEST_DIALOG_FRAGMENT)
                 }
             }
+
+            R.id.menu_create_bond -> {
+                bluetoothGatt?.device?.let {
+                    when (it.bondState) {
+                        BluetoothDevice.BOND_BONDED -> askUnbondDevice(it)
+                        BluetoothDevice.BOND_NONE -> it.createBond()
+                        else -> {}
+                    }
+                }
+            }
+
             android.R.id.home -> {
                 onBackPressed()
                 return true
             }
-            else -> { }
+
+            else -> {}
         }
         return super.onOptionsItemSelected(item)
     }
@@ -638,8 +767,9 @@ class DeviceServicesActivity : BaseActivity() {
         super.onBackPressed()
 
         if (isLogFragmentOn) {
-            fragment_container.visibility = View.GONE
-            services_container.visibility = View.VISIBLE
+
+            binding.fragmentContainer.visibility = View.GONE
+            binding.servicesContainer.visibility = View.VISIBLE
             isLogFragmentOn = false
             supportActionBar?.title = bluetoothDevice?.name
             toggleMenuItemsVisibility(areVisible = true)
@@ -650,12 +780,16 @@ class DeviceServicesActivity : BaseActivity() {
         override fun onConnectionPriorityRequested(priority: Int) {
             bluetoothGatt?.requestConnectionPriority(priority)
             connectionPriority = priority
-            showMessage(getString(when (priority) {
-                BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER -> R.string.connection_priority_low
-                BluetoothGatt.CONNECTION_PRIORITY_BALANCED -> R.string.connection_priority_balanced
-                BluetoothGatt.CONNECTION_PRIORITY_HIGH -> R.string.connection_priority_high
-                else -> R.string.connection_priority_low
-            }))
+            showMessage(
+                getString(
+                    when (priority) {
+                        BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER -> R.string.connection_priority_low
+                        BluetoothGatt.CONNECTION_PRIORITY_BALANCED -> R.string.connection_priority_balanced
+                        BluetoothGatt.CONNECTION_PRIORITY_HIGH -> R.string.connection_priority_high
+                        else -> R.string.connection_priority_low
+                    }
+                )
+            )
         }
     }
 
@@ -672,8 +806,9 @@ class DeviceServicesActivity : BaseActivity() {
             addToBackStack(null)
         }.commit()
 
-        fragment_container.visibility = View.VISIBLE
-        services_container.visibility = View.GONE
+        binding.fragmentContainer.visibility = View.VISIBLE
+        binding.servicesContainer
+        binding.servicesContainer.visibility = View.GONE
         toggleMenuItemsVisibility(areVisible = false)
         isLogFragmentOn = true
     }
@@ -682,16 +817,34 @@ class DeviceServicesActivity : BaseActivity() {
         if (SharedPrefUtils(this@DeviceServicesActivity).shouldDisplayUnbondDeviceDialog()) {
             val dialog = UnbondDeviceDialog(object : UnbondDeviceDialog.Callback {
                 override fun onOkClicked() {
-                    unbondDevice(device)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                        unbondDevice(device)
+                    } else {
+                        removeBond(device)
+                    }
                 }
             })
             dialog.show(supportFragmentManager, "dialog_unbond_device")
         } else {
-            unbondDevice(device)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                unbondDevice(device)
+            } else {
+                removeBond(device)
+            }
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
     private fun unbondDevice(device: BluetoothDevice) {
+        // Try to use CompanionDeviceManager-based bond removal if available and associated
+        if (bluetoothService != null) {
+            val associationId = bluetoothService?.getAssociationIdForDevice(device.address)
+            if (associationId != null) {
+                bluetoothService?.removeBluetoothBond(associationId)
+                return
+            }
+        }
+        // Fallback to reflection-based removeBond
         if (!removeBond(device)) {
             if (SharedPrefUtils(this@DeviceServicesActivity).shouldDisplayManualUnbondDeviceDialog()) {
                 val dialog = ManualUnbondDeviceDialog(object : ManualUnbondDeviceDialog.Callback {
@@ -782,14 +935,22 @@ class DeviceServicesActivity : BaseActivity() {
     private fun sendFileChooserIntent() {
         Intent(Intent.ACTION_GET_CONTENT)
             .apply { type = "*/*" }
-            .also { startActivityForResult(Intent.createChooser(it,
-                getString(R.string.ota_choose_file)), FILE_CHOOSER_REQUEST_CODE) }
+            .also {
+                startActivityForResult(
+                    Intent.createChooser(
+                        it,
+                        getString(R.string.ota_choose_file)
+                    ), FILE_CHOOSER_REQUEST_CODE
+                )
+            }
     }
 
     private fun hideOtaProgressDialog() {
         runOnUiThread {
-            otaProgressDialog?.dismiss()
-            otaProgressDialog = null
+            if(otaProgressDialog?.isVisible == true && otaProgressDialog?.isShowing() == true){
+                otaProgressDialog?.dismiss()
+                otaProgressDialog = null
+            }
         }
     }
 
@@ -824,8 +985,10 @@ class DeviceServicesActivity : BaseActivity() {
 
     private fun hideOtaLoadingDialog() {
         runOnUiThread {
-            otaLoadingDialog?.dismiss()
-            otaLoadingDialog = null
+            if (otaLoadingDialog?.isShowing() == true && otaLoadingDialog?.isVisible == true){
+                otaLoadingDialog?.dismiss()
+                otaLoadingDialog = null
+            }
         }
     }
 
@@ -888,23 +1051,43 @@ class DeviceServicesActivity : BaseActivity() {
                 j++
                 if (j >= MTU - 3 || i >= (datathread.size - 1)) {
                     var wait = System.nanoTime()
-                    val charac = bluetoothGatt?.getService(UuidConsts.OTA_SERVICE)?.getCharacteristic(
-                        UuidConsts.OTA_DATA
-                    )
+                    val charac =
+                        bluetoothGatt?.getService(UuidConsts.OTA_SERVICE)?.getCharacteristic(
+                            UuidConsts.OTA_DATA
+                        )
                     charac?.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                     val progress = ((i + 1).toFloat() / datathread.size) * 100
-                    val bitrate = (((i + 1) * (8.0)).toFloat() / (((wait - start) / 1000000.0).toFloat()))
+                    val bitrate =
+                        (((i + 1) * (8.0)).toFloat() / (((wait - start) / 1000000.0).toFloat()))
                     if (j < MTU - 3) {
                         val end = ByteArray(j)
                         System.arraycopy(value, 0, end, 0, j)
-                        Log.d("Progress", "sent " + (i + 1) + " / " + datathread.size + " - " + String.format("%.1f", progress) + " % - " + String.format("%.2fkbit/s", bitrate) + " - " + Converters.bytesToHexWhitespaceDelimited(end))
+                        Log.d(
+                            "Progress",
+                            "sent " + (i + 1) + " / " + datathread.size + " - " + String.format(
+                                "%.1f",
+                                progress
+                            ) + " % - " + String.format(
+                                "%.2fkbit/s",
+                                bitrate
+                            ) + " - " + Converters.bytesToHexWhitespaceDelimited(end)
+                        )
                         runOnUiThread {
                             otaProgressDialog?.updateDataProgress(progress.toInt())
                         }
                         charac?.value = end
                     } else {
                         j = 0
-                        Log.d("Progress", "sent " + (i + 1) + " / " + datathread.size + " - " + String.format("%.1f", progress) + " % - " + String.format("%.2fkbit/s", bitrate) + " - " + Converters.bytesToHexWhitespaceDelimited(value))
+                        Log.d(
+                            "Progress",
+                            "sent " + (i + 1) + " / " + datathread.size + " - " + String.format(
+                                "%.1f",
+                                progress
+                            ) + " % - " + String.format(
+                                "%.2fkbit/s",
+                                bitrate
+                            ) + " - " + Converters.bytesToHexWhitespaceDelimited(value)
+                        )
                         runOnUiThread {
                             otaProgressDialog?.updateDataProgress(progress.toInt())
                         }
@@ -958,7 +1141,12 @@ class DeviceServicesActivity : BaseActivity() {
                 } else writearray[j] = otafile!![i]
             }
             pgss = ((pack + last).toFloat() / (otafile?.size!! - 1)) * 100
-            Log.d("characte", "last: " + pack + " / " + (pack + last) + " : " + Converters.bytesToHexWhitespaceDelimited(writearray))
+            Log.d(
+                "characte",
+                "last: " + pack + " / " + (pack + last) + " : " + Converters.bytesToHexWhitespaceDelimited(
+                    writearray
+                )
+            )
         } else {
             var j = 0
             writearray = ByteArray(mtuDivisible)
@@ -967,9 +1155,15 @@ class DeviceServicesActivity : BaseActivity() {
                 j++
             }
             pgss = ((pack + mtuDivisible).toFloat() / (otafile?.size!! - 1)) * 100
-            Log.d("characte", "pack: " + pack + " / " + (pack + mtuDivisible) + " : " + Converters.bytesToHexWhitespaceDelimited(writearray))
+            Log.d(
+                "characte",
+                "pack: " + pack + " / " + (pack + mtuDivisible) + " : " + Converters.bytesToHexWhitespaceDelimited(
+                    writearray
+                )
+            )
         }
-        val charac = bluetoothGatt?.getService(UuidConsts.OTA_SERVICE)?.getCharacteristic(UuidConsts.OTA_DATA)
+        val charac = bluetoothGatt?.getService(UuidConsts.OTA_SERVICE)
+            ?.getCharacteristic(UuidConsts.OTA_DATA)
         charac?.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         charac?.value = writearray
         bluetoothGatt?.writeCharacteristic(charac)
@@ -977,17 +1171,19 @@ class DeviceServicesActivity : BaseActivity() {
         val bitrate = 8 * pack.toFloat() / waiting_time
         if (pack > 0) {
             handler.post {
-                runOnUiThread { otaProgressDialog?.let {
+                runOnUiThread {
+                    otaProgressDialog?.let {
                         it.updateDataRate(bitrate)
                         it.updateDataProgress(pgss.toInt())
-                } }
+                    }
+                }
             }
         } else {
             otatime = System.currentTimeMillis()
         }
     }
 
-    private fun readChosenFile() : ByteArray? {
+    private fun readChosenFile(): ByteArray? {
         return try {
             val file: File
             if (stackPath != "" && doubleStepUpload) {
@@ -1009,7 +1205,7 @@ class DeviceServicesActivity : BaseActivity() {
         }
     }
 
-    private fun prepareFilename() : String {
+    private fun prepareFilename(): String {
         return if (stackPath != "" && doubleStepUpload) {
             val last = stackPath.lastIndexOf(File.separator)
             getString(R.string.ota_filename_s, stackPath.substring(last).removePrefix("/"))
@@ -1045,9 +1241,9 @@ class DeviceServicesActivity : BaseActivity() {
 
     private fun showCharacteristicLoadingAnimation(barLabel: String) {
         runOnUiThread {
-            btn_bond_action.visibility = View.GONE
-            tv_bond_state_with_rssi.visibility = View.GONE
-            fly_in_bar.apply {
+            binding.btnDisconnect.visibility = View.GONE
+            binding.tvBondStateWithRssi.visibility = View.GONE
+            binding.flyInBar.apply {
                 setOnClickListener { /* this onclicklistener prevents services and characteristics from user interaction before ui is loaded*/ }
                 visibility = View.VISIBLE
                 startFlyInAnimation(barLabel)
@@ -1057,17 +1253,22 @@ class DeviceServicesActivity : BaseActivity() {
 
     private fun hideCharacteristicLoadingAnimation() {
         runOnUiThread {
-            fly_in_bar.startFlyOutAnimation(object : FlyInBar.Callback {
+
+            binding.flyInBar.startFlyOutAnimation(object : FlyInBar.Callback {
                 override fun onFlyOutAnimationEnded() {
-                    fly_in_bar.visibility = View.GONE
-                    btn_bond_action.visibility = View.VISIBLE
-                    tv_bond_state_with_rssi.visibility = View.VISIBLE
+                    binding.flyInBar.visibility = View.GONE
+                    binding.btnDisconnect.visibility = View.VISIBLE
+                    binding.tvBondStateWithRssi.visibility = View.VISIBLE
                 }
             })
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == WRITE_EXTERNAL_STORAGE_REQUEST_PERMISSION) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
@@ -1124,6 +1325,7 @@ class DeviceServicesActivity : BaseActivity() {
         }
     }
 
+    @SuppressLint("Range")
     private fun getFileName(uri: Uri?): String? {
         var result: String? = null
         if ((uri?.scheme == "content")) {
@@ -1145,10 +1347,10 @@ class DeviceServicesActivity : BaseActivity() {
     }
 
     private fun hasOtaFileCorrectExtension(filename: String?): Boolean {
-        return filename?.toUpperCase(Locale.getDefault())?.contains(".GBL")!!
+        return filename?.uppercase(Locale.getDefault())?.contains(".GBL")!!
     }
 
-    private fun getDeviceName() : String {
+    private fun getDeviceName(): String {
         return bluetoothDevice?.let {
             if (TextUtils.isEmpty(it.name)) getString(R.string.not_advertising_shortcut)
             else it.name
@@ -1209,7 +1411,8 @@ class DeviceServicesActivity : BaseActivity() {
         private const val RECONNECTION_DELAY = 4000L // device needs to reboot
         private const val OTA_CONTROL_START_DELAY = 200L // needed to avoid error status 135
         private const val OTA_CONTROL_END_DELAY = 500L
-        private const val CACHE_REFRESH_DELAY = 500L // no callback available, so give some time to refresh
+        private const val CACHE_REFRESH_DELAY =
+            500L // no callback available, so give some time to refresh
         private const val DIALOG_DELAY = 500L // give time for progress dialog to bind layout
 
         private const val CONNECTION_REQUEST_DIALOG_FRAGMENT = "connection_request_dialog_fragment"
@@ -1225,6 +1428,7 @@ class DeviceServicesActivity : BaseActivity() {
         fun startActivity(context: Context, device: BluetoothDevice) {
             Intent(context, DeviceServicesActivity::class.java).apply {
                 putExtra(CONNECTED_DEVICE, device)
+                putExtra(ORIGIN,"ConnectionsFragment")
             }.also {
                 startActivity(context, it, null)
             }

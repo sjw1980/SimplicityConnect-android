@@ -21,13 +21,13 @@ import android.bluetooth.*
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.AnimatedVectorDrawable
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
+import android.util.Log
 import android.view.*
-import android.view.View.*
-import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
@@ -47,12 +47,13 @@ import com.siliconlabs.bledemo.home_screen.base.BaseServiceDependentMainMenuFrag
 import com.siliconlabs.bledemo.home_screen.fragments.ScanFragment
 import com.siliconlabs.bledemo.home_screen.base.ViewPagerFragment
 import com.siliconlabs.bledemo.features.scan.browser.activities.DeviceServicesActivity
-import com.siliconlabs.bledemo.features.scan.browser.activities.UuidDictionaryActivity
 import com.siliconlabs.bledemo.home_screen.viewmodels.ScanFragmentViewModel
 import com.siliconlabs.bledemo.features.scan.browser.adapters.DebugModeCallback
 import com.siliconlabs.bledemo.home_screen.base.BluetoothDependent
 import com.siliconlabs.bledemo.home_screen.base.LocationDependent
-import kotlinx.android.synthetic.main.fragment_browser.view.*
+import com.siliconlabs.bledemo.utils.BLEUtils
+import com.siliconlabs.bledemo.utils.CustomToastManager
+
 
 class BrowserFragment : BaseServiceDependentMainMenuFragment(),
         OnRefreshListener {
@@ -125,6 +126,7 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
             viewBinding.locationPermissionBar.setFragmentManager(childFragmentManager)
         }
     }
+
 
     private val scanFragmentListener = object: ScanFragment.ScanFragmentListener{
         override fun onScanningStateChanged(isOn: Boolean) {
@@ -244,10 +246,12 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
 
     private fun toggleFilterDescriptionView(description: String?) {
         viewBinding.activeFiltersDescription.apply {
-            description?.let {
+            if (description.isNullOrEmpty()) {
+                visibility = View.GONE
+            } else {
                 visibility = View.VISIBLE
-                text = it
-            } ?: run { visibility = View.GONE }
+                text = description
+            }
         }
     }
 
@@ -274,6 +278,24 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
 
     override fun onResume() {
         super.onResume()
+        if(BLEUtils.IS_FIRMWARE_REBOOTED == true){
+            Log.d("BLE_DEBUG","refreshing rebooted firmware name")
+            bluetoothService?.clearConnectedGatt()
+            viewBinding.swipeRefreshContainer.isRefreshing = true
+            Handler(Looper.getMainLooper()).postDelayed({
+                viewBinding.rvDebugDevices.adapter!!.notifyDataSetChanged()
+                viewBinding.swipeRefreshContainer.isRefreshing = false
+            },2000)
+            Handler(Looper.getMainLooper()).postDelayed({
+                triggerSortMenuClick()
+            },500)
+            Handler(Looper.getMainLooper()).postDelayed({
+                triggerSortMenuClick()
+            },500)
+            Handler(Looper.getMainLooper()).postDelayed({
+                triggerSortMenuClick()
+            },500)
+        }
         bluetoothService?.apply {
             registerGattServerCallback(gattServerCallback)
             registerGattCallback(gattCallback)
@@ -284,6 +306,69 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
             getScanFragment().setScanFragmentListener(scanFragmentListener)
             refreshViewState(viewModel.getScannerFragmentViewState())
         }
+    }
+
+    private fun triggerSortMenuClick(){
+        onOptionsItemSelected(MenuItemStub(R.id.menu_sort))
+    }
+
+    class MenuItemStub(private val id: Int) : MenuItem {
+
+        // For simplicity, we'll use 0 as the default group ID
+        private val groupId: Int = 0
+
+        override fun getItemId(): Int = id
+        override fun getGroupId(): Int = groupId
+        override fun getOrder(): Int = 0 // Default order
+
+        override fun setEnabled(enabled: Boolean): MenuItem = this
+        override fun isEnabled(): Boolean = true
+        override fun setVisible(visible: Boolean): MenuItem = this
+        override fun isVisible(): Boolean = true
+        override fun setChecked(checked: Boolean): MenuItem = this
+        override fun isChecked(): Boolean = false
+        override fun setTitle(title: CharSequence?): MenuItem = this
+        override fun setTitle(title: Int): MenuItem = this
+        override fun getTitle(): CharSequence = "Stub Title" // More descriptive
+        override fun setTitleCondensed(title: CharSequence?): MenuItem = this
+        override fun getTitleCondensed(): CharSequence = "Stub Title Condensed" // More descriptive
+
+        override fun setIcon(icon: Drawable?): MenuItem = this
+        override fun setIcon(iconRes: Int): MenuItem = this
+        override fun getIcon(): Drawable? = null
+        override fun setIntent(intent: Intent?): MenuItem = this
+        override fun getIntent(): Intent? = null
+        override fun setShortcut(numericChar: Char, alphaChar: Char): MenuItem = this
+        override fun setNumericShortcut(numericChar: Char): MenuItem = this
+        override fun getNumericShortcut(): Char = '\u0000' // Null character
+        override fun setAlphabeticShortcut(alphaChar: Char): MenuItem = this
+        override fun getAlphabeticShortcut(): Char = '\u0000' // Null character
+        override fun setCheckable(checkable: Boolean): MenuItem = this
+        override fun isCheckable(): Boolean = false
+        override fun setOnMenuItemClickListener(listener: MenuItem.OnMenuItemClickListener?): MenuItem = this
+        override fun getSubMenu(): SubMenu? = null
+        override fun hasSubMenu(): Boolean = false
+        override fun setActionView(view: View?): MenuItem = this
+        override fun setActionView(resId: Int): MenuItem = this
+        override fun getActionView(): View? = null
+        override fun setShowAsAction(actionEnum: Int) {}
+        override fun setShowAsActionFlags(actionEnum: Int): MenuItem = this
+        override fun expandActionView(): Boolean = false
+        override fun collapseActionView(): Boolean = false
+        override fun isActionViewExpanded(): Boolean = false
+        override fun setOnActionExpandListener(listener: MenuItem.OnActionExpandListener?): MenuItem = this
+
+        override fun setActionProvider(actionProvider: ActionProvider?): MenuItem = this
+        override fun getActionProvider(): ActionProvider? = null
+        override fun setContentDescription(contentDescription: CharSequence?): MenuItem = this
+        override fun getContentDescription(): CharSequence = ""
+        override fun setTooltipText(tooltipText: CharSequence?): MenuItem = this
+        override fun getTooltipText(): CharSequence = ""
+        override fun setIconTintList(tint: android.content.res.ColorStateList?): MenuItem = this // Returns this.
+        override fun getIconTintList(): android.content.res.ColorStateList? = null
+        override fun setIconTintMode(tintMode: android.graphics.PorterDuff.Mode?): MenuItem = this // Returns this.
+        override fun getIconTintMode(): android.graphics.PorterDuff.Mode? = null
+        override fun getMenuInfo(): ContextMenu.ContextMenuInfo? = null
     }
 
     private fun refreshViewState(viewState: ScannerFragmentViewState) {
@@ -327,8 +412,7 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
                         model.sortDevices()
                         adapter.updateDevices(model.getBluetoothInfoViewsState(), withMoves = true)
                         viewBinding.rvDebugDevices.scrollToPosition(0)
-                        Toast.makeText(requireContext(), getString(R.string.devices_sorted_by_descending_rssi),
-                                Toast.LENGTH_SHORT).show()
+                        CustomToastManager.show(requireContext(),getString(R.string.devices_sorted_by_descending_rssi),5000)
                     }
                 }
                 true
@@ -355,11 +439,17 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
             handler.postDelayed(refreshScanRunnable, RESTART_SCAN_TIMEOUT)
         } else {
             if (activityViewModel?.getIsBluetoothOn() != true) {
-                Toast.makeText(requireContext(), getString(R.string.bluetooth_disabled), Toast.LENGTH_SHORT).show()
+                //Toast.makeText(requireContext(), getString(R.string.bluetooth_disabled), Toast.LENGTH_SHORT).show()
+                CustomToastManager.show(requireContext(),getString(R.string.bluetooth_disabled),5000)
+
             } else if (activityViewModel?.getAreBluetoothPermissionsGranted() != true) {
-                Toast.makeText(requireContext(), getString(R.string.bluetooth_permissions_denied), Toast.LENGTH_SHORT).show()
+                //Toast.makeText(requireContext(), getString(R.string.bluetooth_permissions_denied), Toast.LENGTH_SHORT).show()
+                CustomToastManager.show(requireContext(),getString(R.string.bluetooth_permissions_denied),5000)
+
             } else if (activityViewModel?.getIsLocationPermissionGranted() != true) {
-                Toast.makeText(requireContext(), getString(R.string.location_permission_denied), Toast.LENGTH_SHORT).show()
+               // Toast.makeText(requireContext(), getString(R.string.location_permission_denied), Toast.LENGTH_SHORT).show()
+                CustomToastManager.show(requireContext(),getString(R.string.location_permission_denied),5000)
+
             }
         }
         viewBinding.swipeRefreshContainer.post { viewBinding.swipeRefreshContainer.isRefreshing = false }
@@ -409,7 +499,9 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
 
     private val gattCallback = object : TimeoutGattCallback() {
         override fun onTimeout() {
-            Toast.makeText(requireContext(), getString(R.string.toast_connection_timed_out), Toast.LENGTH_SHORT).show()
+           /* Toast.makeText(requireContext(), getString(R.string.toast_connection_timed_out), Toast.LENGTH_SHORT).show()*/
+            CustomToastManager.show(requireContext(), getString(
+                R.string.toast_connection_timed_out),5000)
             hideConnectingAnimation()
             deviceToConnect = null
         }
@@ -462,7 +554,8 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
             val deviceName = if (TextUtils.isEmpty(gatt.device.name)) getString(R.string.not_advertising_shortcut) else gatt.device.name
             if (deviceToConnect != null && deviceToConnect?.address!! == gatt.device.address) {
                 deviceToConnect = null
-                Toast.makeText(requireContext(), getFailedConnectingToDeviceMessage(deviceName, status), Toast.LENGTH_LONG).show()
+             // Toast.makeText(requireContext(), getFailedConnectingToDeviceMessage(deviceName, status), Toast.LENGTH_LONG).show()
+                CustomToastManager.show(requireContext(),getFailedConnectingToDeviceMessage(deviceName, status),5000)
             } else {
                 (activity as MainActivity).showLongMessage(
                         if (status == 0) getString(R.string.device_disconnected_successfully, getDeviceName(gatt))
@@ -476,6 +569,8 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
         deviceToConnect?.let {
             Intent(requireContext(), DeviceServicesActivity::class.java).apply {
                 putExtra(DeviceServicesActivity.CONNECTED_DEVICE, it.device)
+                putExtra(RECYCLERVIEW_POSITION, devicesAdapter?.getItemPosition())
+                putExtra(ORIGIN,"BrowserFragment")
             }.also {
                 activityResultCallback.launch(it)
             }
@@ -511,7 +606,7 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
         }
     }
 
-    private val debugModeCallback = object : DebugModeCallback {
+     var debugModeCallback = object : DebugModeCallback {
         override fun connectToDevice(position: Int, deviceInfo: BluetoothDeviceInfo) {
             if (viewModel.getIsScanningOn()) {
                 viewModel.setIsScanningOn(false)
@@ -561,5 +656,8 @@ class BrowserFragment : BaseServiceDependentMainMenuFragment(),
         private const val SCAN_UPDATE_PERIOD = 1000L //ms
         private const val START_ACTIVITY_DELAY = 250L
         private const val ANIMATION_DELAY = 1000L // give time to display animation
+        const val RECYCLERVIEW_POSITION = "rv_position"
+        const val ORIGIN = "origin"
+
     }
 }

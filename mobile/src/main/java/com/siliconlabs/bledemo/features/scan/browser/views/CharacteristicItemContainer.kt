@@ -11,19 +11,17 @@ import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import com.siliconlabs.bledemo.bluetooth.parsing.Common
 import com.siliconlabs.bledemo.bluetooth.parsing.Engine
-import com.siliconlabs.bledemo.features.scan.browser.models.Mapping
+import com.siliconlabs.bledemo.bluetooth.ble.Property
 import com.siliconlabs.bledemo.R
 import com.siliconlabs.bledemo.databinding.CharacteristicContainerBinding
 import com.siliconlabs.bledemo.databinding.PropertyContainerBinding
-import com.siliconlabs.bledemo.features.configure.gatt_configurator.models.Property
 import com.siliconlabs.bledemo.utils.UuidUtils
 
 class CharacteristicItemContainer(
         context: Context,
         private val callback: Callback,
         val characteristic: BluetoothGattCharacteristic,
-        private val isMandatorySystemService: Boolean,
-        private val characteristicDictionaryUuids: Map<String, Mapping>
+        private val isMandatorySystemService: Boolean
 ) : LinearLayout(context) {
 
     private var nameType: ServiceItemContainer.NameType = ServiceItemContainer.NameType.UNKNOWN
@@ -46,10 +44,6 @@ class CharacteristicItemContainer(
     private fun initViews() {
         _binding.apply {
             characteristicTitle.text = getCharacteristicName()
-            tvRenameChar.visibility = when (nameType) {
-                ServiceItemContainer.NameType.ENGINE, ServiceItemContainer.NameType.CUSTOM -> View.GONE
-                ServiceItemContainer.NameType.USER, ServiceItemContainer.NameType.UNKNOWN -> View.VISIBLE
-            }
             characteristicUuid.text = UuidUtils.getUuidText(characteristic.uuid)
         }
     }
@@ -58,13 +52,17 @@ class CharacteristicItemContainer(
         Common.getPropertiesList(characteristic.properties).also { properties ->
             if (isCharacteristicWritable(properties)) { // one "Write" icon for all types
                 properties.remove(Property.RELIABLE_WRITE)
-                properties.remove(Property.WRITE_WITHOUT_RESPONSE)
+               // properties.remove(Property.WRITE_WITHOUT_RESPONSE)
             }
         }.forEach { property ->
             PropertyContainerBinding.inflate(LayoutInflater.from(context)).apply {
-                propertyText.text = context.getString(getIconText(property))
-                propertyIcon.setImageDrawable(ContextCompat.getDrawable(context, getIconDrawable(property)))
-
+                if(context.getString(getIconText(property)).equals(ContextCompat.getString(context,R.string.property_write_no_response),true)){
+                    propertyText.text = context.getString(getIconText(Property.WRITE))
+                    propertyIcon.setImageDrawable(ContextCompat.getDrawable(context, getIconDrawable(Property.WRITE)))
+                }else{
+                    propertyText.text = context.getString(getIconText(property))
+                    propertyIcon.setImageDrawable(ContextCompat.getDrawable(context, getIconDrawable(property)))
+                }
                 if (isMandatorySystemService) {
                     root.isEnabled = false
                     root.alpha = 0.3f // show as disabled
@@ -95,9 +93,7 @@ class CharacteristicItemContainer(
     }
 
     private fun setupUiListeners() {
-        _binding.apply {
-            tvRenameChar.setOnClickListener { callback.onRenameClicked(this@CharacteristicItemContainer) }
-        }
+        // no-op: rename (UUID dictionary) feature removed
     }
 
     fun hideDescriptorsContainer() {
@@ -118,19 +114,9 @@ class CharacteristicItemContainer(
                 name
             }
         } ?: run {
-            characteristicDictionaryUuids[UuidUtils.getUuidText(characteristic.uuid)]?.let { mapping ->
-                nameType = ServiceItemContainer.NameType.USER
-                mapping.name
-            }
-        } ?: run {
             nameType = ServiceItemContainer.NameType.UNKNOWN
             context.getString(R.string.unknown_characteristic_label)
         }
-    }
-
-    fun setCharacteristicName(newName: String) {
-        nameType = ServiceItemContainer.NameType.USER
-        _binding.characteristicTitle.text = newName
     }
 
     fun getPropertyBinding(property: Property) : PropertyContainerBinding? {
@@ -139,6 +125,7 @@ class CharacteristicItemContainer(
 
     @DrawableRes
     private fun getIconDrawable(property: Property) : Int {
+        println("SI Connect Property ICON:$property")
         return when (property) {
             Property.BROADCAST -> R.drawable.ic_debug_prop_broadcast
             Property.READ -> R.drawable.redesign_ic_property_read
@@ -153,6 +140,7 @@ class CharacteristicItemContainer(
 
     @StringRes
     private fun getIconText(property: Property) : Int {
+        println("SI Connect Property Text:$property")
         return when (property) {
             Property.BROADCAST -> R.string.property_broadcast
             Property.READ -> R.string.property_read
@@ -166,7 +154,6 @@ class CharacteristicItemContainer(
     }
 
     interface Callback {
-        fun onRenameClicked(container: CharacteristicItemContainer)
         fun onPropertyClicked(
                 property: Property,
                 characteristicContainer: CharacteristicItemContainer

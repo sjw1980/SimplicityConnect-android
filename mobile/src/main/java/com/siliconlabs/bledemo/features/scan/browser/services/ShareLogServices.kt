@@ -6,6 +6,11 @@ import android.os.*
 import android.widget.Toast
 import com.siliconlabs.bledemo.R
 import com.siliconlabs.bledemo.utils.Constants
+import com.siliconlabs.bledemo.utils.CustomToastManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import java.util.*
 
 class ShareLogServices : Service() {
@@ -28,7 +33,8 @@ class ShareLogServices : Service() {
             sendIntent.action = Intent.ACTION_SEND
             sendIntent.putExtra(Intent.EXTRA_TEXT, logsText)
             sendIntent.type = "text/plain"
-            val shareIntent = Intent.createChooser(sendIntent, resources.getString(R.string.app_name_simplicity_Connect) + " LOGS")
+            val shareIntent = Intent.createChooser(sendIntent,
+                resources.getString(R.string.app_name_simplicity_Connect) + " LOGS")
             shareIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             startActivity(shareIntent)
             stopSelf(msg.arg1)
@@ -47,8 +53,10 @@ class ShareLogServices : Service() {
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
-        Toast.makeText(this, resources.getString(R.string.Preparing_logs_please_wait), Toast.LENGTH_SHORT).show()
-
+      // Toast.makeText(this, resources.getString(R.string.Preparing_logs_please_wait), Toast.LENGTH_SHORT).show()
+        CoroutineScope(Dispatchers.Main).launch {
+            CustomToastManager.show(applicationContext,resources.getString(R.string.Preparing_logs_please_wait),5000)
+        }
         // For each start request, send a message to start a job and deliver the
         // start ID so we know which request we're stopping when we finish the job
         val msg = serviceHandler!!.obtainMessage()
@@ -69,7 +77,10 @@ class ShareLogServices : Service() {
             }
             sb.toString()
         } catch (ex: ConcurrentModificationException) {
-            Toast.makeText(this, resources.getString(R.string.Logs_cannot_be_generated), Toast.LENGTH_SHORT).show()
+            //Toast.makeText(this, resources.getString(R.string.Logs_cannot_be_generated), Toast.LENGTH_SHORT).show()
+            CoroutineScope(Dispatchers.Main).launch {
+                CustomToastManager.show(applicationContext,resources.getString(R.string.Logs_cannot_be_generated),5000)
+            }
             null
         }
     }

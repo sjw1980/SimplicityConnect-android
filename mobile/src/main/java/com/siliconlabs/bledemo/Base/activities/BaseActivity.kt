@@ -8,8 +8,8 @@ import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import com.siliconlabs.bledemo.R
 import com.siliconlabs.bledemo.base.dialogs.ProgressDialogWithSpinner
+import com.siliconlabs.bledemo.utils.CustomToastManager
 import timber.log.Timber
-
 abstract class BaseActivity : AppCompatActivity() {
     enum class ConnectionStatus {
         CONNECTING, READING_DEVICE_STATE
@@ -60,19 +60,26 @@ abstract class BaseActivity : AppCompatActivity() {
             } else {
                 Timber.e("Dialog is not visible, cannot dismiss")
             }
+
         }
     }
 
     fun showMessage(message: String) {
-        runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
+        runOnUiThread {
+            CustomToastManager.show(this@BaseActivity,message,5000)
+        }
     }
 
     fun showMessage(stringResId: Int) {
-        runOnUiThread { Toast.makeText(this, stringResId, Toast.LENGTH_SHORT).show() }
+        runOnUiThread {
+            CustomToastManager.show(this@BaseActivity,getString(stringResId),5000)
+        }
     }
 
     fun showLongMessage(message: String) {
-        runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
+        runOnUiThread {
+            CustomToastManager.show(this@BaseActivity,message,5000)
+        }
     }
 
     fun hideKeyboard() {

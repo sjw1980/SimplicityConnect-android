@@ -9,9 +9,10 @@ import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
-import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.fragment.app.DialogFragment
+import com.pranavpandey.android.dynamic.toasts.DynamicToast
+
 
 open class BaseDialogFragment(
     private val hasCustomWidth: Boolean? = null,
@@ -42,7 +43,7 @@ open class BaseDialogFragment(
 
     protected fun showMessage(@StringRes message: Int) {
         activity?.runOnUiThread {
-            Toast.makeText(context, getString(message), Toast.LENGTH_SHORT).show()
+            DynamicToast.make(requireContext(),getString(message),5000).show()
         }
     }
 

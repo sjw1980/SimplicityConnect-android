@@ -4,7 +4,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import com.siliconlabs.bledemo.features.scan.browser.activities.DeviceServicesActivity
-import com.siliconlabs.bledemo.features.iop_test.models.CommonUUID
+import com.siliconlabs.bledemo.features.scan.browser.models.CommonUUID
 import java.util.*
 
 class LocalServicesFragment : ServicesFragment(isRemote = false) {

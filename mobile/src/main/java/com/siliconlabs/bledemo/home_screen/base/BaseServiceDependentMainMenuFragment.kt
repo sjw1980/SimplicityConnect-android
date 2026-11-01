@@ -11,12 +11,14 @@ import com.siliconlabs.bledemo.home_screen.views.BluetoothEnableBar
 import com.siliconlabs.bledemo.home_screen.views.LocationEnableBar
 import com.siliconlabs.bledemo.home_screen.views.LocationPermissionBar
 import com.siliconlabs.bledemo.home_screen.views.BluetoothPermissionsBar
+import com.siliconlabs.bledemo.utils.CustomToastManager
 
 abstract class BaseServiceDependentMainMenuFragment : BaseMainMenuFragment() {
 
     protected open val bluetoothDependent: BluetoothDependent? = null
     protected open val locationDependent: LocationDependent? = null
     protected var activityViewModel: MainActivityViewModel? = null
+    protected open val notificationDependent:NotificationDependent? = null
 
     protected fun toggleBluetoothBar(isOn: Boolean, bar: BluetoothEnableBar) {
         bar.visibility = if (isOn) View.GONE else View.VISIBLE
@@ -34,6 +36,8 @@ abstract class BaseServiceDependentMainMenuFragment : BaseMainMenuFragment() {
     protected fun toggleLocationPermissionBar(isPermissionGranted: Boolean, bar: LocationPermissionBar) {
         bar.visibility = if (isPermissionGranted) View.GONE else View.VISIBLE
     }
+
+
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -63,6 +67,12 @@ abstract class BaseServiceDependentMainMenuFragment : BaseMainMenuFragment() {
             activityViewModel?.isLocationPermissionGranted?.observe(viewLifecycleOwner, Observer { isGranted ->
                 locationDependent?.onLocationPermissionStateChanged(isGranted)
             })
+            activityViewModel?.isNotificationOn?.observe(viewLifecycleOwner, Observer { isOn ->
+                notificationDependent?.onNotificationStateChanged(isOn)
+            })
+            activityViewModel?.isNotificationPermissionGranted?.observe(viewLifecycleOwner, Observer { areGranted ->
+               notificationDependent?.onNotificationPermissionsStateChanged(areGranted)
+            })
         }
     }
 
@@ -74,14 +84,26 @@ abstract class BaseServiceDependentMainMenuFragment : BaseMainMenuFragment() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             bluetoothDependent?.setupBluetoothPermissionsBarButtons()
         }
+        notificationDependent?.let {
+            it.setupNotificationBarButtons()
+            it.setupNotificationPermissionBarButtons()
+        }
     }
 
     fun showToastLengthShort(message: String) {
-        activity?.runOnUiThread { Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show() }
+        activity?.runOnUiThread {
+            //Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+            CustomToastManager.show(requireContext(), message,5000)
+
+        }
     }
 
     fun showToastLengthLong(message: String) {
-        activity?.runOnUiThread { Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show() }
+        activity?.runOnUiThread {
+           // Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+            CustomToastManager.show(requireContext(), message,5000)
+
+        }
     }
 
     protected fun isBluetoothOperationPossible() : Boolean {

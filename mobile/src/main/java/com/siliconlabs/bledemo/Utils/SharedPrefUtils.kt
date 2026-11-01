@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.siliconlabs.bledemo.features.scan.browser.models.Mapping
 import java.util.*
 
 class SharedPrefUtils(context: Context) {
@@ -13,14 +12,10 @@ class SharedPrefUtils(context: Context) {
     private val gson: Gson
 
     companion object {
-        private const val MAP_KEY = "MAP_KEY"
         private const val FAVORITES_DEVICES_KEY = "FAVORITES_DEVICES_KEY"
         private const val TEMPORARY_FAVORITES_DEVICES_KEY = "TEMPORARY_FAVORITES_DEVICES_KEY"
-        private const val DISPLAY_APPLICATION_LEAVE_DIALOG_KEY = "DISPLAY_APPLICATION_LEAVE_DIALOG_KEY"
         private const val DISPLAY_UNBOND_DEVICE_DIALOG_KEY = "DISPLAY_UNBOND_DEVICE_DIALOG_KEY"
         private const val DISPLAY_MANUAL_UNBOND_DEVICE_DIALOG_KEY = "DISPLAY_MANUAL_UNBOND_DEVICE_DIALOG_KEY"
-        private const val CHARACTERISTIC_NAMES_KEY = "CHARACTERISTIC_NAMES_KEY"
-        private const val SERVICE_NAMES_KEY = "SERVICE_NAMES_KEY"
     }
 
     init {
@@ -87,43 +82,6 @@ class SharedPrefUtils(context: Context) {
 
     private fun getString(key: String): String? {
         return mPrefs.getString(key, null)
-    }
-
-    val characteristicNamesMap: HashMap<String, Mapping>
-        get() {
-            val defValue = Gson().toJson(HashMap<String, String>())
-            val json = mPrefs.getString(CHARACTERISTIC_NAMES_KEY, defValue)
-            val token: TypeToken<HashMap<String, Mapping>> = object : TypeToken<HashMap<String, Mapping>>() {}
-            return gson.fromJson(json, token.type)
-        }
-
-    val serviceNamesMap: HashMap<String, Mapping>
-        get() {
-            val defValue = Gson().toJson(HashMap<String, String>())
-            val json = mPrefs.getString(SERVICE_NAMES_KEY, defValue)
-            val token: TypeToken<HashMap<String, Mapping>> = object : TypeToken<HashMap<String, Mapping>>() {}
-            return gson.fromJson(json, token.type)
-        }
-
-    fun saveCharacteristicNamesMap(map: HashMap<String, Mapping>) {
-        val json = gson.toJson(map)
-        editor.putString(CHARACTERISTIC_NAMES_KEY, json)
-        editor.apply()
-    }
-
-    fun saveServiceNamesMap(map: HashMap<String, Mapping>) {
-        val json = gson.toJson(map)
-        editor.putString(SERVICE_NAMES_KEY, json)
-        editor.apply()
-    }
-
-    fun shouldDisplayLeaveApplicationDialog(): Boolean {
-        return mPrefs.getBoolean(DISPLAY_APPLICATION_LEAVE_DIALOG_KEY, true)
-    }
-
-    fun setShouldLeaveApplicationDialog(displayDialog: Boolean) {
-        editor.putBoolean(DISPLAY_APPLICATION_LEAVE_DIALOG_KEY, displayDialog)
-        editor.apply()
     }
 
     fun shouldDisplayManualUnbondDeviceDialog(): Boolean {

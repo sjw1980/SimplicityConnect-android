@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.graphics.Color
 import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -15,11 +16,12 @@ import com.siliconlabs.bledemo.bluetooth.beacon_utils.BleFormat
 import com.siliconlabs.bledemo.bluetooth.ble.BluetoothDeviceInfo
 import com.siliconlabs.bledemo.bluetooth.ble.ConnectedDeviceInfo
 import com.siliconlabs.bledemo.bluetooth.ble.ScanResultCompat
+import com.siliconlabs.bledemo.bluetooth.services.BluetoothService
 import com.siliconlabs.bledemo.features.scan.browser.models.GraphInfo
 import com.siliconlabs.bledemo.features.scan.browser.models.ScannedDeviceInfo
 import com.siliconlabs.bledemo.features.scan.browser.view_states.GraphFragmentViewState
 import com.siliconlabs.bledemo.features.scan.browser.view_states.ScannerFragmentViewState
-import com.siliconlabs.bledemo.features.scan.rssi_graph.model.GraphPoint
+import com.siliconlabs.bledemo.features.scan.browser.models.GraphPoint
 import com.siliconlabs.bledemo.utils.FilterDeviceParams
 import com.siliconlabs.bledemo.utils.SharedPrefUtils
 import com.siliconlabs.bledemo.utils.StringUtils
@@ -34,7 +36,7 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
     val activeFiltersDescription: LiveData<String?> = _activeFiltersDescription
     private val _activeFilters: MutableLiveData<FilterDeviceParams?> = MutableLiveData(FilterDeviceParams(
         name = "D_0922",
-        rssiValue = -130,
+        rssiValue = null,
         isRssiFlag = false,
         bleFormats = listOf(),
         isOnlyFavourite = false,
@@ -65,6 +67,29 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
     var miliTimestamp: Long = 0L
 
     var shouldResetChart = false
+
+    private val _overallProgress = MutableLiveData<Pair<Float, Float>>()
+    val overallProgress: MutableLiveData<Pair<Float, Float>> get() = _overallProgress
+
+    private val _saveStartEndRSSIRange = MutableLiveData<String>("")
+    val saveStartEndRSSIRange : MutableLiveData<String> get() = _saveStartEndRSSIRange
+
+
+    private val _sliderValues: MutableLiveData<Pair<Float, Float>> = MutableLiveData<Pair<Float, Float>>(Pair(-130f, 0f)) // Default values for left and right
+
+    val sliderValues: MutableLiveData<Pair<Float, Float>> get() = _sliderValues
+
+    fun saveRSSISlideRValues(leftValue:Float,rightValue:Float){
+        _sliderValues.value = Pair(leftValue,rightValue)
+    }
+
+    fun updateOverallProgress(leftValue: Float,rightValue:Float) {
+        _overallProgress.value = Pair(leftValue,rightValue)
+    }
+
+    fun saveStartEndRssiRange(rssiRange:String){
+        _saveStartEndRSSIRange.value = rssiRange
+    }
 
     fun getScannerFragmentViewState() : ScannerFragmentViewState {
         return ScannerFragmentViewState(
@@ -140,18 +165,24 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
         return if (index != -1) index else null
     }
 
-    override fun handleScanResult(result: ScanResultCompat) {
+
+    override fun handleScanResult(
+        result: ScanResultCompat,
+        connectType: BluetoothService.GattConnectType?,
+        context: Context?
+    ) {
         val address = result.device?.address ?: return
         val dataColor = generateDataColor()
 
         scannedDevices.apply {
             synchronized(this) {
-                getOrPut(address, { ScannedDeviceInfo(
-                            result.device!!,
-                            sharedPrefUtils.isFavorite(address),
-                            dataColor
-                    )}
-                ).apply {
+                getOrPut(address) {
+                    ScannedDeviceInfo(
+                        result.device!!,
+                        sharedPrefUtils.isFavorite(address),
+                        dataColor
+                    )
+                }.apply {
                     bluetoothInfo = updateScanInfo(bluetoothInfo, result)
                     addNewGraphData(graphInfo.data, result)
                 }
@@ -161,20 +192,25 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
                 _filteredDevices.value?.apply {
                     synchronized(this) {
                         val index = indexOfFirst { it.bluetoothInfo.address == address }
-
-                        ( getOrNull(index) ?: ScannedDeviceInfo(
-                                    result.device!!,
-                                    sharedPrefUtils.isFavorite(address),
-                                    dataColor)
-                        ).apply {
-                            bluetoothInfo = updateScanInfo(bluetoothInfo, result)
-                            addNewGraphData(graphInfo.data, result) 
-                        }.also {
-                            if (index == -1) {
-                                _deviceToInsert.value = BluetoothInfoViewState(it)
-                                _labelToInsert.value = LabelViewState(it)
-                                add(it)
+                        if (index != -1) {
+                            // Update existing entry
+                            val existing = get(index)
+                            existing.bluetoothInfo = updateScanInfo(existing.bluetoothInfo, result)
+                            addNewGraphData(existing.graphInfo.data, result)
+                            set(index, existing)
+                        } else {
+                            // Add new entry
+                            val newDevice = ScannedDeviceInfo(
+                                result.device!!,
+                                sharedPrefUtils.isFavorite(address),
+                                dataColor
+                            ).apply {
+                                bluetoothInfo = updateScanInfo(bluetoothInfo, result)
+                                addNewGraphData(graphInfo.data, result)
                             }
+                            _deviceToInsert.value = BluetoothInfoViewState(newDevice)
+                            _labelToInsert.value = LabelViewState(newDevice)
+                            add(newDevice)
                         }
                     }
                 }
@@ -182,6 +218,8 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
             _isAnyDeviceDiscovered.value = _filteredDevices.value?.size ?: 0 > 0
         }
     }
+
+
 
     fun handleOnLegendItemClick(clickedLabel: LabelViewState?) {
         _highlightedLabel.value =
@@ -213,7 +251,13 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
 
     fun updateFiltering(activeFilters: FilterDeviceParams?) {
         _activeFilters.value = activeFilters
-        _activeFiltersDescription.value = activeFilters?.buildDescription(context)
+        if (activeFilters?.isRssiFlag == true && activeFilters.rssiValue == Pair(0.0f, 0.0f)) {
+            activeFilters.isRssiFlag = false
+            _activeFiltersDescription.postValue("")
+        }else{
+            _activeFiltersDescription.value = activeFilters?.buildDescription(context)
+        }
+
         _filteredDevices.value = _filteredDevices.value?.apply {
             clear()
             scannedDevices.values.forEach {
@@ -226,7 +270,10 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
 
     fun toggleViewExpansion(position: Int) {
         _filteredDevices.value = _filteredDevices.value?.apply {
-            set(position, this[position].copy(isBluetoothInfoExpanded = !this[position].isBluetoothInfoExpanded))
+            println("SICONNECT --this$this")
+            println("SICONNECT --isBluetoothInfoExpanded${this[position].isBluetoothInfoExpanded}")
+            set(position, this[position]
+                .copy(isBluetoothInfoExpanded = !this[position].isBluetoothInfoExpanded))
         }
     }
 
@@ -255,10 +302,15 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
     }
 
     fun setDeviceConnectionState(position: Int, connectionState: BluetoothDeviceInfo.ConnectionState) {
-        _filteredDevices.postValue(_filteredDevices.value?.apply {
-            val newInfo = this[position].bluetoothInfo.apply { this.connectionState = connectionState }
-            set(position, this[position].copy(bluetoothInfo = newInfo))
-        })
+        val currentList = _filteredDevices.value
+        if (currentList != null && position >= 0 && position < currentList.size) {
+            _filteredDevices.postValue(currentList.apply {
+                val newInfo = this[position].bluetoothInfo.apply { this.connectionState = connectionState }
+                set(position, this[position].copy(bluetoothInfo = newInfo))
+            })
+        } else {
+            Log.e("ScanFragmentViewModel","Error: Invalid position or empty list in setDeviceConnectionState")
+        }
     }
 
     fun setDeviceConnectionState(address: String, connectionState: BluetoothDeviceInfo.ConnectionState) {
@@ -285,7 +337,12 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
                             !doesRawDataMatch(filterName, device)) return false
                 }
             }
-            if (it.isRssiFlag && device.rssi < it.rssiValue) return false
+            // Filter by RSSI
+            if (it.isRssiFlag) {
+                val rssiRange = it.rssiValue ?: return@let // If rssiValue is null, skip this filter
+                if (device.rssi !in rssiRange.first.toInt()..rssiRange.second.toInt()) return false
+            }
+
             if (it.bleFormats.isNotEmpty() && !it.bleFormats.contains(device.bleFormat)) return false
             if (it.isOnlyFavourite && !(device.isFavorite)) return false
             if (it.isOnlyBonded && device.device.bondState != BluetoothDevice.BOND_BONDED) return false
@@ -296,8 +353,8 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
     }
 
     private fun doesNameMatch(filterName: String, deviceName: String) : Boolean {
-        return ( getLowerCase(deviceName).contains(getLowerCase(filterName)) || 
-                getLowerCase(deviceName).contains(getLowerCase("le")) )
+        return (getLowerCase(deviceName).contains(getLowerCase(filterName)) ||
+                getLowerCase(deviceName).contains(getLowerCase("le")))
     }
 
     private fun doesAddressMatch(filterName: String, deviceAddress: String) : Boolean {
@@ -311,7 +368,7 @@ class ScanFragmentViewModel(private val context: Context) : ScannerViewModel() {
         } ?: false
     }
 
-    private fun getLowerCase(text: String) = text.toLowerCase(Locale.getDefault())
+    private fun getLowerCase(text: String) = text.lowercase(Locale.getDefault())
 
     private fun generateDataColor() : Int {
         return Color.rgb(
